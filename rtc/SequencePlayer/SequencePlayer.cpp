@@ -426,9 +426,52 @@ bool SequencePlayer::setWrenches(const double *wrenches, double tm)
     return true;
 }
 
+bool SequencePlayer::setTargetPoseMatrix(const char* gname, const double *xyz, const double *rot, double tm, const char* frame_name)
+{
+    if(m_debugLevel > 0) {
+        std::cerr << __PRETTY_FUNCTION__ << std::endl;
+    }
+
+    // ik params
+    hrp::Vector3 end_p(xyz[0], xyz[1], xyz[2]);
+    hrp::Matrix33 rot33;
+
+    rot33(0, 0) = rot[0];    rot33(0, 1) = rot[1];    rot33(0, 2) = rot[2];
+    rot33(1, 0) = rot[3];    rot33(1, 1) = rot[4];    rot33(1, 2) = rot[5];
+    rot33(2, 0) = rot[6];    rot33(2, 1) = rot[7];    rot33(2, 2) = rot[8];
+
+    std::vector<int> indices;
+    if (! m_seq->getJointGroup(gname, indices)) {
+        std::cerr << "[setTargetPoseMatrix] Could not find joint group " << gname << std::endl;
+        return false;
+    }
+    string target_name = m_robot->joint(indices[indices.size() - 1])->name;
+    hrp::Matrix33 end_R = m_robot->link(target_name)->calcRfromAttitude(rot33);
+
+    return setTargetPoseWorker(gname, end_p, end_R, tm, frame_name);
+}
+
 bool SequencePlayer::setTargetPose(const char* gname, const double *xyz, const double *rpy, double tm, const char* frame_name)
 {
     if ( m_debugLevel > 0 ) {
+        std::cerr << __PRETTY_FUNCTION__ << std::endl;
+    }
+    // ik params
+    hrp::Vector3 end_p(xyz[0], xyz[1], xyz[2]);
+    std::vector<int> indices;
+    if(!m_seq->getJointGroup(gname, indices)) {
+        std::cerr << "[setTargetPose] Could not find joint group " << gname << std::endl;
+        return false;
+    }
+    string target_name = m_robot->joint(indices[indices.size() - 1])->name;
+    hrp::Matrix33 end_R = m_robot->link(target_name)->calcRfromAttitude(hrp::rotFromRpy(rpy[0], rpy[1], rpy[2]));
+
+    return setTargetPoseWorker(gname, end_p, end_R, tm, frame_name);
+}
+
+bool SequencePlayer::setTargetPoseWorker(const char* gname, hrp::Vector3 end_p, hrp::Matrix33 end_R, double tm, const char* frame_name)
+{
+    if(m_debugLevel > 0) {
         std::cerr << __PRETTY_FUNCTION__ << std::endl;
     }
     Guard guard(m_mutex);
@@ -437,15 +480,15 @@ bool SequencePlayer::setTargetPose(const char* gname, const double *xyz, const d
     hrp::dvector start_av, end_av;
     std::vector<hrp::dvector> avs;
     if (! m_seq->getJointGroup(gname, indices) ) {
-        std::cerr << "[setTargetPose] Could not find joint group " << gname << std::endl;
+        std::cerr << "[setTargetPoseWorker] Could not find joint group " << gname << std::endl;
         return false;
     }
     start_av.resize(indices.size());
     end_av.resize(indices.size());
 
     //std::cerr << std::endl;
-    if ( ! m_robot->joint(indices[0])->parent ) {
-        std::cerr << "[setTargetPose] " << m_robot->joint(indices[0])->name << " does not have parent" << std::endl;
+    if( ! m_robot->joint(indices[0])->parent ) {
+        std::cerr << "[setTargetPoseWorker] " << m_robot->joint(indices[0])->name << " does not have parent " << std::endl;
         return false;
     }
     string base_parent_name = m_robot->joint(indices[0])->parent->name;
@@ -468,12 +511,12 @@ bool SequencePlayer::setTargetPose(const char* gname, const double *xyz, const d
     // ik params
     hrp::Vector3 start_p(m_robot->link(target_name)->p);
     hrp::Matrix33 start_R(m_robot->link(target_name)->R);
-    hrp::Vector3 end_p(xyz[0], xyz[1], xyz[2]);
-    hrp::Matrix33 end_R = m_robot->link(target_name)->calcRfromAttitude(hrp::rotFromRpy(rpy[0], rpy[1], rpy[2]));
+    //hrp::Vector3 end_p(xyz[0], xyz[1], xyz[2]);
+    //hrp::Matrix33 end_R = m_robot->link(target_name)->calcRfromAttitude(hrp::rotFromRpy(rpy[0], rpy[1], rpy[2]));
 
     // change start and end must be relative to the frame_name
     if ( (frame_name != NULL) && (! m_robot->link(frame_name) ) ) {
-        std::cerr << "[setTargetPose] Could not find frame_name " << frame_name << std::endl;
+        std::cerr << "[setTargetPoseWorker] Could not find frame_name " << frame_name << std::endl;
         return false;
     } else if ( frame_name != NULL ) {
         hrp::Vector3 frame_p(m_robot->link(frame_name)->p);
@@ -510,7 +553,7 @@ bool SequencePlayer::setTargetPose(const char* gname, const double *xyz, const d
                       << omega[0] << " " << omega[1] << " " << omega[2] << std::endl;
         }
         if ( ! ret ) {
-            std::cerr << "[setTargetPose] IK failed" << std::endl;
+            std::cerr << "[setTargetPoseWorker] IK failed " << std::endl;
             return false;
         }
         v_pos[i] = (const double *)malloc(sizeof(double)*manip->numJoints());

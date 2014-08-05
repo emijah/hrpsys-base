@@ -198,5 +198,15 @@ module OpenHRP
      * @return true if set successfully, false otherwise
      */
     boolean setWrenches(in dSequence wrenches, in double tm);
+
+    /**
+     * @brief Interpolate X, Y, Z and 3x3 rotation matrix of the target joint/link group, wrt world coords Function returns without waiting for interpolation to finish
+     * @param gname name of the joint group
+     * @param xyz : X,Y,Z position of the target link
+     * @param rot : flattened 3x3 Rotation matrix of the target link
+     * @param tm duration
+     * @return true if set successfully, false otherwise
+     */
+    boolean setTargetPoseMatrix(in string name, in dSequence xyz, in dSequence rot, in double tm);
   };
 };
